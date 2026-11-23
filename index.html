@@ -165,6 +165,24 @@ const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String
 let group = 'all', shown = {}, loading = true, loaded = 0, lastTotal = 0;
 const opened = new Map(); // card id -> open/closed as the user left it, kept across re-renders
 
+const RETRY_WAIT = [2000, 5000, 10000];
+// Google's 429 usually comes without CORS headers, so it surfaces as a network TypeError, not res.status.
+async function fetchCSV(src) {
+  const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`;
+  for (let attempt = 0; ; attempt++) {
+    let err, retryable = true;
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (res.ok) return await res.text();
+      err = new Error('HTTP ' + res.status);
+      retryable = res.status === 429 || res.status >= 500; // other 4xx (sheet made private, deleted) won't fix itself
+    } catch (e) { err = e; } // network error, incl. a 429 hidden by missing CORS headers
+    if (!retryable || attempt >= RETRY_WAIT.length) throw err;
+    $sync.textContent = `Đang thử lại ${src.name} (${attempt + 1}/${RETRY_WAIT.length})…`;
+    await new Promise(r => setTimeout(r, RETRY_WAIT[attempt] * (0.8 + Math.random() * 0.4))); // jitter so the office doesn't retry in lockstep
+  }
+}
+
 async function load() {
   loading = true;
   loaded = 0;
@@ -173,16 +191,17 @@ async function load() {
   $sync.textContent = `Đang tải 0/${SOURCES.length} bảng…`;
   await Promise.all(SOURCES.map(async src => {
     try {
-      const res = await fetch(`https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`, { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const rows = Papa.parse(await res.text()).data;
+      const rows = Papa.parse(await fetchCSV(src)).data;
       const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
       if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
       const h = rows[hr].map((x, i) => clean(x) || 'Cột ' + colName(i));
       const first = list => list.map(k => h.indexOf(k)).filter(i => i >= 0);
       Object.assign(src, { headers: h, keyIdx: first(src.keys), nameIdx: first(NAME)[0], metaIdx: first(META).slice(0, 2),
         statusIdx: first(STATUS), lateIdx: first(LATE)[0], rows: rows.slice(hr + 1), error: null });
-    } catch (e) { src.rows = []; src.error = e.message; }
+    } catch (e) {
+      src.rows = [];
+      src.error = e instanceof TypeError ? 'Google chặn tạm hoặc sheet không còn chia sẻ công khai' : e.message;
+    }
     $sync.textContent = `Đang tải ${++loaded}/${SOURCES.length} bảng…`;
     render(); // show results as each tab arrives
   }));
