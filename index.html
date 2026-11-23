@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tra cứu Style / CM#</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f5f7; color: #222; }
+  header { position: sticky; top: 0; background: #1f4e79; color: #fff; padding: 12px 16px; }
+  header h1 { font-size: 16px; margin: 0 0 8px; }
+  #q { width: 100%; box-sizing: border-box; font-size: 18px; padding: 10px; border: 0; border-radius: 6px; }
+  #status { font-size: 12px; margin-top: 6px; opacity: .85; }
+  #status button { font-size: 12px; margin-left: 8px; }
+  main { padding: 12px 16px; max-width: 1100px; margin: auto; }
+  h2 { font-size: 15px; margin: 18px 0 8px; color: #1f4e79; }
+  .card { background: #fff; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .card summary { cursor: pointer; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; margin-top: 8px; font-size: 13px; }
+  .grid b { color: #666; font-weight: 500; display: block; font-size: 11px; }
+  .grid div { white-space: pre-wrap; word-break: break-word; }
+  .muted { color: #888; font-size: 13px; }
+  .open { float: right; font-size: 12px; font-weight: 400; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tra cứu theo mã Style hoặc CM# vật tư</h1>
+  <input id="q" placeholder="VD: CDT65, 28464, H-VB30373..." autofocus autocomplete="off">
+  <div id="status">Đang tải dữ liệu...</div>
+</header>
+<main id="out"></main>
+<script>
+// Each source: one Google Sheet tab. headerRow is 0-based; keys = columns matched against the query.
+const SOURCES = [
+  { name: 'Theo dõi PA', id: '1yQNURTEAMJxPhurKf7qxwzRnAn3nwvgUrveI-qpTHoE', gid: '849460225', headerRow: 1,
+    keys: ['STYLE'], title: ['STYLE', 'STYLE NAME', 'TEAM', 'PLAN MONTH', 'DUYỆT PA'] },
+  { name: 'Danh sách PO', id: '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', gid: '1491559955', headerRow: 0,
+    keys: ['Style', 'Style + Grid'], title: ['Style + Grid', 'Style Name', 'BUY', 'Reference PO # (VBD PO)', 'Quantity'] },
+  { name: 'Vật tư (CM#)', id: '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE', gid: '1131181694', headerRow: 1,
+    keys: ['CM#'], title: ['CM#', 'ĐVT', 'Grand Total', 'NOTE'] },
+];
+const MAX = 100;
+const $q = document.getElementById('q'), $out = document.getElementById('out'), $st = document.getElementById('status');
+const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const norm = s => String(s || '').trim().toUpperCase();
+
+async function load() {
+  $st.textContent = 'Đang tải dữ liệu...';
+  await Promise.all(SOURCES.map(async src => {
+    try {
+      const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const rows = Papa.parse(await res.text()).data;
+      src.headers = rows[src.headerRow].map((h, i) => h.replace(/\s+/g, ' ').trim() || 'Cột ' + colName(i));
+      src.keyIdx = src.keys.map(k => src.headers.indexOf(k)).filter(i => i >= 0);
+      if (!src.keyIdx.length) throw new Error('không thấy cột ' + src.keys.join('/'));
+      src.titleIdx = src.title.map(k => src.headers.indexOf(k)).filter(i => i >= 0);
+      src.rows = rows.slice(src.headerRow + 1);
+      src.error = null;
+    } catch (e) { src.rows = []; src.error = e.message; }
+  }));
+  const errs = SOURCES.filter(s => s.error).map(s => `${s.name}: ${s.error}`);
+  $st.innerHTML = `Đã tải ${SOURCES.reduce((n, s) => n + s.rows.length, 0)} dòng lúc ${new Date().toLocaleTimeString('vi-VN')}`
+    + (errs.length ? ` — LỖI: ${esc(errs.join('; '))}` : '') + ' <button onclick="load()">Tải lại</button>';
+  search();
+}
+
+function search() {
+  const q = norm($q.value);
+  if (q.length < 2) { $out.innerHTML = '<p class="muted">Gõ ít nhất 2 ký tự.</p>'; return; }
+  let html = '';
+  for (const src of SOURCES) {
+    if (!src.rows) continue;
+    const hits = src.rows.filter(r => src.keyIdx.some(i => norm(r[i]).includes(q)));
+    // exact matches first
+    hits.sort((a, b) => src.keyIdx.some(i => norm(b[i]) === q) - src.keyIdx.some(i => norm(a[i]) === q));
+    const link = `https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}`;
+    html += `<h2>${esc(src.name)} — ${hits.length} kết quả${hits.length > MAX ? ` (hiện ${MAX})` : ''} <a class="open" href="${link}" target="_blank">mở sheet</a></h2>`;
+    if (!hits.length) html += '<p class="muted">Không có.</p>';
+    for (const r of hits.slice(0, MAX)) {
+      const title = src.titleIdx.map(i => r[i]).filter(Boolean).join(' · ');
+      const cells = r.map((v, i) => v && v.trim() && v.trim() !== '-'
+        ? `<div><b>${esc(src.headers[i] || 'Cột ' + colName(i))}</b>${esc(v.trim())}</div>` : '').join('');
+      html += `<details class="card" ${hits.length <= 3 ? 'open' : ''}><summary>${esc(title)}</summary><div class="grid">${cells}</div></details>`;
+    }
+  }
+  $out.innerHTML = html;
+}
+
+let t; $q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 200); });
+load();
+</script>
+</body>
+</html>
