@@ -13,13 +13,15 @@
   #status { font-size: 12px; margin-top: 6px; opacity: .85; }
   #status button { font-size: 12px; margin-left: 8px; }
   main { padding: 12px 16px; max-width: 1100px; margin: auto; }
-  h2 { font-size: 15px; margin: 18px 0 8px; color: #1f4e79; }
+  h2 { font-size: 16px; margin: 22px 0 4px; padding-bottom: 4px; color: #1f4e79; border-bottom: 2px solid #1f4e79; }
+  h3 { font-size: 14px; margin: 14px 0 8px; color: #1f4e79; }
   .card { background: #fff; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
   .card summary { cursor: pointer; font-weight: 600; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; margin-top: 8px; font-size: 13px; }
   .grid b { color: #666; font-weight: 500; display: block; font-size: 11px; }
   .grid div { white-space: pre-wrap; word-break: break-word; }
   .muted { color: #888; font-size: 13px; }
+  .err { color: #b00020; font-size: 13px; }
   .open { float: right; font-size: 12px; font-weight: 400; }
 </style>
 </head>
@@ -31,15 +33,27 @@
 </header>
 <main id="out"></main>
 <script>
-// Each source: one Google Sheet tab. headerRow is 0-based; keys = columns matched against the query.
+// Each source: one Google Sheet tab. keys = header names matched against the query;
+// the header row is the first of the top 5 rows containing a key, so inserted title rows don't break it.
+const F2 = '1yQNURTEAMJxPhurKf7qxwzRnAn3nwvgUrveI-qpTHoE', F3 = '1qGbrPanMBZNVP6lWBh3ETSLl8Pu7Ijo-7WfpsObHSic',
+      F4 = '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', F5 = '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE';
 const SOURCES = [
-  { name: 'Theo dõi PA', id: '1yQNURTEAMJxPhurKf7qxwzRnAn3nwvgUrveI-qpTHoE', gid: '849460225', headerRow: 1,
-    keys: ['STYLE'], title: ['STYLE', 'STYLE NAME', 'TEAM', 'PLAN MONTH', 'DUYỆT PA'] },
-  { name: 'Danh sách PO', id: '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', gid: '1491559955', headerRow: 0,
-    keys: ['Style', 'Style + Grid'], title: ['Style + Grid', 'Style Name', 'BUY', 'Reference PO # (VBD PO)', 'Quantity'] },
-  { name: 'Vật tư (CM#)', id: '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE', gid: '1131181694', headerRow: 1,
-    keys: ['CM#'], title: ['CM#', 'ĐVT', 'Grand Total', 'NOTE'] },
+  { group: 'COACH / KATE SPADE', name: 'Theo dõi PA (DATA)', id: F2, gid: '1363034961', keys: ['STYLE'] },
+  { group: 'COACH / KATE SPADE', name: 'Theo dõi reject', id: F2, gid: '849460225', keys: ['STYLE'] },
+  { group: 'COACH / KATE SPADE', name: 'PA list', id: F2, gid: '558887054', keys: ['Style'] },
+  { group: 'COACH / KATE SPADE', name: 'Theo dõi túi PA', id: F2, gid: '1041297598', keys: ['MÃ'] },
+  { group: 'COACH / KATE SPADE', name: 'PA Coach', id: F3, gid: '201883774', keys: ['Style'] },
+  { group: 'COACH / KATE SPADE', name: 'PA Kate Spade', id: F3, gid: '205650717', keys: ['Style'] },
+  { group: 'TRAVEL / GOLF', name: 'Danh sách PO (Data)', id: F4, gid: '1491559955', keys: ['Style', 'Style + Grid'] },
+  { group: 'TRAVEL / GOLF', name: 'PPS List', id: F4, gid: '2097556221', keys: ['Style', 'Style + Grid'] },
+  { group: 'TRAVEL / GOLF', name: 'PA list', id: F5, gid: '715633471', keys: ['Style', 'Style + Grid'] },
+  { group: 'TRAVEL / GOLF', name: 'Vật tư Miền Đông', id: F5, gid: '1131181694', keys: ['CM#'] },
+  { group: 'TRAVEL / GOLF', name: 'Vật tư Trà Vinh', id: F5, gid: '1057713774', keys: ['CM#'] },
 ];
+const GROUPS = ['COACH / KATE SPADE', 'TRAVEL / GOLF'];
+// Card title = last key column + up to 4 of these that exist in the tab.
+const TITLE = ['STYLE NAME', 'Style Name', 'TEAM', 'Buy', 'BUY', 'PLAN MONTH', 'DUYỆT PA', 'NGÀY NHẬN TÚI', 'NHÀ MÁY', 'ĐVT', 'Grand Total', 'NOTE'];
+const clean = h => h.replace(/\s+/g, ' ').trim();
 const MAX = 100;
 const $q = document.getElementById('q'), $out = document.getElementById('out'), $st = document.getElementById('status');
 const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
@@ -54,11 +68,12 @@ async function load() {
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const rows = Papa.parse(await res.text()).data;
-      src.headers = rows[src.headerRow].map((h, i) => h.replace(/\s+/g, ' ').trim() || 'Cột ' + colName(i));
+      const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
+      if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
+      src.headers = rows[hr].map((h, i) => clean(h) || 'Cột ' + colName(i));
       src.keyIdx = src.keys.map(k => src.headers.indexOf(k)).filter(i => i >= 0);
-      if (!src.keyIdx.length) throw new Error('không thấy cột ' + src.keys.join('/'));
-      src.titleIdx = src.title.map(k => src.headers.indexOf(k)).filter(i => i >= 0);
-      src.rows = rows.slice(src.headerRow + 1);
+      src.titleIdx = [...src.keyIdx.slice(-1), ...TITLE.map(k => src.headers.indexOf(k)).filter(i => i >= 0).slice(0, 4)];
+      src.rows = rows.slice(hr + 1);
       src.error = null;
     } catch (e) { src.rows = []; src.error = e.message; }
   }));
@@ -72,19 +87,26 @@ function search() {
   const q = norm($q.value);
   if (q.length < 2) { $out.innerHTML = '<p class="muted">Gõ ít nhất 2 ký tự.</p>'; return; }
   let html = '';
-  for (const src of SOURCES) {
-    if (!src.rows) continue;
-    const hits = src.rows.filter(r => src.keyIdx.some(i => norm(r[i]).includes(q)));
-    // exact matches first
-    hits.sort((a, b) => src.keyIdx.some(i => norm(b[i]) === q) - src.keyIdx.some(i => norm(a[i]) === q));
-    const link = `https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}`;
-    html += `<h2>${esc(src.name)} — ${hits.length} kết quả${hits.length > MAX ? ` (hiện ${MAX})` : ''} <a class="open" href="${link}" target="_blank">mở sheet</a></h2>`;
-    if (!hits.length) html += '<p class="muted">Không có.</p>';
-    for (const r of hits.slice(0, MAX)) {
-      const title = src.titleIdx.map(i => r[i]).filter(Boolean).join(' · ');
-      const cells = r.map((v, i) => v && v.trim() && v.trim() !== '-'
-        ? `<div><b>${esc(src.headers[i] || 'Cột ' + colName(i))}</b>${esc(v.trim())}</div>` : '').join('');
-      html += `<details class="card" ${hits.length <= 3 ? 'open' : ''}><summary>${esc(title)}</summary><div class="grid">${cells}</div></details>`;
+  for (const g of GROUPS) {
+    const failed = SOURCES.filter(s => s.group === g && s.error);
+    const found = SOURCES.filter(s => s.group === g && s.rows).map(src => {
+      const hits = src.rows.filter(r => src.keyIdx.some(i => norm(r[i]).includes(q)));
+      // exact matches first
+      hits.sort((a, b) => src.keyIdx.some(i => norm(b[i]) === q) - src.keyIdx.some(i => norm(a[i]) === q));
+      return { src, hits };
+    }).filter(f => f.hits.length);
+    html += `<h2 class="group">${g} — ${found.reduce((n, f) => n + f.hits.length, 0)} kết quả</h2>`;
+    if (failed.length) html += `<p class="err">⚠ Không tải được: ${esc(failed.map(s => s.name).join(', '))} — kết quả có thể thiếu, bấm Tải lại.</p>`;
+    if (!found.length) html += '<p class="muted">Không có.</p>';
+    for (const { src, hits } of found) {
+      const link = `https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}`;
+      html += `<h3>${esc(src.name)} — ${hits.length}${hits.length > MAX ? ` (hiện ${MAX})` : ''} <a class="open" href="${link}" target="_blank">mở sheet</a></h3>`;
+      for (const r of hits.slice(0, MAX)) {
+        const title = src.titleIdx.map(i => r[i]).filter(Boolean).join(' · ');
+        const cells = r.map((v, i) => v && v.trim() && v.trim() !== '-'
+          ? `<div><b>${esc(src.headers[i] || 'Cột ' + colName(i))}</b>${esc(v.trim())}</div>` : '').join('');
+        html += `<details class="card" ${hits.length <= 3 ? 'open' : ''}><summary>${esc(title)}</summary><div class="grid">${cells}</div></details>`;
+      }
     }
   }
   $out.innerHTML = html;
