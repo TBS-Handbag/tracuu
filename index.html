@@ -25,7 +25,7 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #12181E; --surface: #1B232B; --ink: #E7ECF0; --ink-2: #98A4AF; --line: #2C3742;
-      --navy: #8CB4D8; --pass: #5BBF85; --fail: #F0776C; --wait: #E3AE57; --mark: #6B5A12;
+      --navy: #8CB4D8; --pass: #5BBF85; --fail: #F0776C; --wait: #E3AE57; --mark: #8A6B12;
     }
   }
   * { box-sizing: border-box; }
@@ -81,15 +81,25 @@
     border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; margin: 0 6px 6px 0; cursor: pointer;
   }
 
-  h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 22px 0 8px; display: flex; justify-content: space-between; gap: 12px; }
-  h2 a { color: var(--navy); font-weight: 500; }
+  /* one sheet = one block: header strip on top, matching rows listed underneath */
+  .grp { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin: 14px 0; overflow: hidden; }
+  h2 {
+    margin: 0; padding: 9px 14px; font-size: 14px; font-weight: 700; color: var(--ink);
+    display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--navy) 7%, var(--surface));
+  }
+  h2 .n { font-size: 12px; font-weight: 700; color: var(--ink-2); background: color-mix(in srgb, var(--ink-2) 16%, transparent); border-radius: 999px; padding: 1px 8px; }
+  h2 a { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--navy); text-decoration: none; padding: 4px 0; }
+  h2 a:hover, h2 a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 
-  .hit { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+  .hit + .hit { border-top: 1px solid var(--line); }
   .hit summary { list-style: none; cursor: pointer; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; }
+  .hit summary:hover { background: color-mix(in srgb, var(--navy) 4%, transparent); }
   .hit summary::-webkit-details-marker { display: none; }
-  .hit summary:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: var(--radius); }
+  .hit summary:focus-visible { outline: 3px solid var(--navy); outline-offset: -3px; }
   .code { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; word-break: break-all; }
-  .code mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+  /* highlighter stroke on the lower half, so the matched part stays readable in both themes */
+  .code mark { color: inherit; background: linear-gradient(transparent 55%, var(--mark) 55%); }
   /* status reads like the coloured tag tied to a physical sample */
   .status { font-size: 13px; font-weight: 700; align-self: start; white-space: nowrap; padding: 3px 9px; border-radius: 6px; }
   .status:empty { display: none; }
@@ -97,13 +107,14 @@
   .fail .status { color: var(--fail); background: color-mix(in srgb, var(--fail) 14%, transparent); }
   .wait .status { color: var(--wait); background: color-mix(in srgb, var(--wait) 16%, transparent); }
   .name { grid-column: 1 / -1; color: var(--ink); }
-  .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: var(--ink-2); }
+  .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--ink-2); }
+  .meta b { font-weight: 600; color: var(--ink); }
   .hit[open] summary { border-bottom: 1px solid var(--line); }
-  dl { margin: 0; padding: 12px 14px 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 20px; }
+  dl { margin: 0; padding: 12px 14px 14px; background: color-mix(in srgb, var(--bg) 40%, var(--surface)); display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 20px; }
   dl div { min-width: 0; }
   dt { font-size: 12px; color: var(--ink-2); }
   dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
-  .more { font-weight: 600; font-size: 14px; line-height: 1; color: var(--navy); background: none; border: 1px dashed var(--line); border-radius: var(--radius); width: 100%; padding: 12px; cursor: pointer; }
+  .more { font-weight: 600; font-size: 14px; line-height: 1; color: var(--navy); background: none; border: 0; border-top: 1px dashed var(--line); width: 100%; padding: 12px; cursor: pointer; }
 
   @media (min-width: 700px) {
     .top { padding-top: 24px; }
@@ -165,15 +176,49 @@ const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String
 let group = 'all', shown = {}, loading = true, loaded = 0, lastTotal = 0;
 const opened = new Map(); // card id -> open/closed as the user left it, kept across re-renders
 
-const RETRY_WAIT = [2000, 5000, 10000];
+const RETRY_WAIT = [2000, 5000, 10000], CACHE_MS = 3 * 60 * 1000;
+// IndexedDB, not localStorage: the sheets are ~5MB of text, which fills localStorage's quota and breaks recent searches.
+const idb = (mode, op) => new Promise((resolve, reject) => {
+  const open = indexedDB.open('tracuu', 1);
+  open.onupgradeneeded = () => open.result.createObjectStore('csv');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const db = open.result;
+    try { // a throw in this callback would otherwise leave the promise pending forever
+      const tx = db.transaction('csv', mode);
+      tx.oncomplete = tx.onabort = () => db.close(); // an open connection would block a future version upgrade
+      const req = op(tx.objectStore('csv'));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch (e) { db.close(); reject(e); }
+  };
+});
+const cacheKey = src => `${src.id}.${src.gid}`;
+// Drop cached tabs no longer in SOURCES; put() overwrites the rest, so the cache stays at one copy per tab.
+const pruneCache = () => idb('readonly', s => s.getAllKeys()).then(keys => {
+  const keep = new Set(SOURCES.map(cacheKey));
+  keys.filter(k => !keep.has(k)).forEach(k => idb('readwrite', s => s.delete(k)).catch(() => {}));
+}).catch(() => {});
+
 // Google's 429 usually comes without CORS headers, so it surfaces as a network TypeError, not res.status.
-async function fetchCSV(src) {
+async function fetchCSV(src, force) {
+  const key = cacheKey(src);
+  if (!force) try {
+    const c = await idb('readonly', s => s.get(key));
+    const age = c ? Date.now() - c.at : -1;
+    if (age >= 0 && age < CACHE_MS) { src.at = c.at; return c.text; } // age < 0: clock moved back since caching, don't trust it
+  } catch {} // no IndexedDB (private mode, blocked storage): just fetch
   const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`;
   for (let attempt = 0; ; attempt++) {
     let err, retryable = true;
     try {
       const res = await fetch(url, { cache: 'no-store' });
-      if (res.ok) return await res.text();
+      if (res.ok) {
+        const text = await res.text();
+        src.at = Date.now();
+        idb('readwrite', s => s.put({ at: src.at, text }, key)).catch(() => {}); // caching is best-effort, don't wait on it
+        return text;
+      }
       err = new Error('HTTP ' + res.status);
       retryable = res.status === 429 || res.status >= 500; // other 4xx (sheet made private, deleted) won't fix itself
     } catch (e) { err = e; } // network error, incl. a 429 hidden by missing CORS headers
@@ -183,7 +228,7 @@ async function fetchCSV(src) {
   }
 }
 
-async function load() {
+async function load(force) {
   loading = true;
   loaded = 0;
   opened.clear(); // ids are row positions, which may shift after a reload
@@ -191,7 +236,7 @@ async function load() {
   $sync.textContent = `Đang tải 0/${SOURCES.length} bảng…`;
   await Promise.all(SOURCES.map(async src => {
     try {
-      const rows = Papa.parse(await fetchCSV(src)).data;
+      const rows = Papa.parse(await fetchCSV(src, force)).data;
       const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
       if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
       const h = rows[hr].map((x, i) => clean(x) || 'Cột ' + colName(i));
@@ -200,6 +245,7 @@ async function load() {
         statusIdx: first(STATUS), lateIdx: first(LATE)[0], rows: rows.slice(hr + 1), error: null });
     } catch (e) {
       src.rows = [];
+      src.at = null;
       src.error = e instanceof TypeError ? 'Google chặn tạm hoặc sheet không còn chia sẻ công khai' : e.message;
     }
     $sync.textContent = `Đang tải ${++loaded}/${SOURCES.length} bảng…`;
@@ -208,7 +254,8 @@ async function load() {
   loading = false;
   $('reload').disabled = false;
   const n = SOURCES.reduce((s, x) => s + x.rows.length, 0).toLocaleString('vi-VN');
-  $sync.textContent = `${n} dòng, cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  const at = Math.min(...SOURCES.map(x => x.at || Date.now())); // oldest tab, so cached data doesn't look fresher than it is
+  $sync.textContent = `${n} dòng, cập nhật ${new Date(at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
   render();
 }
 
@@ -243,13 +290,13 @@ function search(q) {
 function hitHTML(src, { r, k, id }, q, open) {
   const [cls, label] = statusOf(src, r);
   const name = src.nameIdx !== undefined ? r[src.nameIdx] : '';
-  const meta = [...src.metaIdx.map(i => r[i] && `${src.headers[i]}: ${clean(r[i])}`)].filter(Boolean);
+  const meta = src.metaIdx.filter(i => clean(r[i] || '')).map(i => `${esc(src.headers[i])}: <b>${esc(clean(r[i]))}</b>`);
   const fields = r.map((v, i) => (v = (v || '').trim()) && v !== '-'
     ? `<div><dt>${esc(src.headers[i] || 'Cột ' + colName(i))}</dt><dd>${esc(v)}</dd></div>` : '').join('');
   return `<details class="hit ${cls}" data-id="${id}"${opened.has(id) ? (opened.get(id) ? ' open' : '') : open ? ' open data-auto' : ''}><summary>
     <span class="code">${highlight(clean(r[k]), q)}</span><span class="status">${esc(label)}</span>
     ${name ? `<span class="name">${esc(clean(name))}</span>` : ''}
-    <span class="meta">${meta.map(m => `<span>${esc(m)}</span>`).join('')}</span>
+    <span class="meta">${meta.map(m => `<span>${m}</span>`).join('')}</span>
   </summary><dl>${fields}</dl></details>`;
 }
 
@@ -287,9 +334,10 @@ function render() {
   lastTotal = results.reduce((n, x) => n + x.hits.length, 0);
   for (const { src, hits } of visible) {
     const key = src.gid, n = shown[key] || PAGE;
-    html += `<h2><span>${esc(src.name)}: ${hits.length}</span><a href="https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}" target="_blank" rel="noopener">Mở sheet</a></h2>`;
+    html += `<section class="grp"><h2>${esc(src.name)}<span class="n">${hits.length}</span><a href="https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}" target="_blank" rel="noopener">Mở sheet ↗</a></h2>`;
     html += hits.slice(0, n).map(h => hitHTML(src, h, q, total === 1)).join('');
     if (hits.length > n) html += `<button type="button" class="more" data-more="${key}">Xem thêm ${Math.min(PAGE, hits.length - n)} dòng (còn ${hits.length - n})</button>`;
+    html += '</section>';
   }
   $out.innerHTML = html;
 }
@@ -309,7 +357,7 @@ $q.addEventListener('input', () => {
 });
 $q.addEventListener('keydown', e => { if (e.key === 'Escape') setQuery(''); });
 $clear.addEventListener('click', () => { setQuery(''); $q.focus(); });
-$('reload').addEventListener('click', load);
+$('reload').addEventListener('click', () => load(true)); // manual reload skips the cache
 $filters.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   group = b.dataset.g; render();
@@ -330,6 +378,7 @@ document.addEventListener('keydown', e => { if (e.key === '/' && document.active
 $q.value = new URL(location.href).searchParams.get('q') || '';
 render();
 load();
+pruneCache();
 </script>
 </body>
 </html>
