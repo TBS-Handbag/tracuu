@@ -3,116 +3,313 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tra cứu Style / CM#</title>
+<title>Tra mẫu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f5f7; color: #222; }
-  header { position: sticky; top: 0; background: #1f4e79; color: #fff; padding: 12px 16px; }
-  header h1 { font-size: 16px; margin: 0 0 8px; }
-  #q { width: 100%; box-sizing: border-box; font-size: 18px; padding: 10px; border: 0; border-radius: 6px; }
-  #status { font-size: 12px; margin-top: 6px; opacity: .85; }
-  #status button { font-size: 12px; margin-left: 8px; }
-  main { padding: 12px 16px; max-width: 1100px; margin: auto; }
-  h2 { font-size: 16px; margin: 22px 0 4px; padding-bottom: 4px; color: #1f4e79; border-bottom: 2px solid #1f4e79; }
-  h3 { font-size: 14px; margin: 14px 0 8px; color: #1f4e79; }
-  .card { background: #fff; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-  .card summary { cursor: pointer; font-weight: 600; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; margin-top: 8px; font-size: 13px; }
-  .grid b { color: #666; font-weight: 500; display: block; font-size: 11px; }
-  .grid div { white-space: pre-wrap; word-break: break-word; }
-  .muted { color: #888; font-size: 13px; }
-  .err { color: #b00020; font-size: 13px; }
-  .open { float: right; font-size: 12px; font-weight: 400; }
+  :root {
+    --bg: #E9ECEE;        /* sample-room grey */
+    --surface: #FFFFFF;
+    --ink: #17222D;
+    --ink-2: #5A6673;
+    --line: #D3D8DD;
+    --navy: #1D3B57;
+    --pass: #2E7D4F;      /* approved / OK tag */
+    --fail: #C2362B;      /* rejected / late tag */
+    --wait: #B7791F;      /* anything else that looks like a status */
+    --mark: #FFE58A;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12181E; --surface: #1B232B; --ink: #E7ECF0; --ink-2: #98A4AF; --line: #2C3742;
+      --navy: #8CB4D8; --pass: #5BBF85; --fail: #F0776C; --wait: #E3AE57; --mark: #6B5A12;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  button, input { font-family: inherit; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 15px/1.5 'Be Vietnam Pro', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+
+  /* search bar stays on screen while scrolling results */
+  .top { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 14px 0 10px; }
+  .brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .brand h1 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; color: var(--navy); }
+  .sync { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 8px; text-align: right; }
+  .sync button:disabled { opacity: .5; cursor: default; }
+  .sync button {
+    font: inherit; font-weight: 600; color: var(--navy); background: none; border: 0; padding: 4px 2px; cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .search { position: relative; }
+  .search input {
+    width: 100%; font-weight: 600; font-size: 22px; line-height: 1.2; color: var(--ink);
+    padding: 14px 48px 14px 16px; border: 2px solid var(--navy); border-radius: var(--radius);
+    background: var(--surface); outline: none; letter-spacing: 0.01em;
+  }
+  .search input::placeholder { color: var(--ink-2); font-weight: 400; font-size: 17px; letter-spacing: 0; }
+  .search input:focus-visible { box-shadow: 0 0 0 4px color-mix(in srgb, var(--navy) 25%, transparent); }
+  .clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 40px; height: 40px; border: 0; border-radius: 8px; background: none; color: var(--ink-2);
+    font-size: 22px; cursor: pointer;
+  }
+  .clear[hidden] { display: none; }
+  .filters { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+  .filters button {
+    flex: none; font-weight: 500; font-size: 14px; line-height: 1; color: var(--ink); cursor: pointer;
+    padding: 9px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+  }
+  .filters button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: var(--surface); }
+  .filters b { font-weight: 700; margin-left: 4px; }
+
+  main { padding: 6px 0 48px; }
+  .note { color: var(--ink-2); margin: 18px 0; }
+  .warn { color: var(--fail); font-size: 14px; margin: 8px 0; }
+
+  .recent { margin: 18px 0; }
+  .recent p { margin: 0 0 8px; color: var(--ink-2); }
+  .recent button {
+    font-weight: 600; font-size: 15px; line-height: 1; color: var(--navy); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; margin: 0 6px 6px 0; cursor: pointer;
+  }
+
+  h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 22px 0 8px; display: flex; justify-content: space-between; gap: 12px; }
+  h2 a { color: var(--navy); font-weight: 500; }
+
+  .hit { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+  .hit summary { list-style: none; cursor: pointer; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; }
+  .hit summary::-webkit-details-marker { display: none; }
+  .hit summary:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: var(--radius); }
+  .code { font-size: 18px; font-weight: 700; letter-spacing: 0.01em; word-break: break-all; }
+  .code mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+  /* status reads like the coloured tag tied to a physical sample */
+  .status { font-size: 13px; font-weight: 700; align-self: start; white-space: nowrap; padding: 3px 9px; border-radius: 6px; }
+  .status:empty { display: none; }
+  .pass .status { color: var(--pass); background: color-mix(in srgb, var(--pass) 14%, transparent); }
+  .fail .status { color: var(--fail); background: color-mix(in srgb, var(--fail) 14%, transparent); }
+  .wait .status { color: var(--wait); background: color-mix(in srgb, var(--wait) 16%, transparent); }
+  .name { grid-column: 1 / -1; color: var(--ink); }
+  .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: var(--ink-2); }
+  .hit[open] summary { border-bottom: 1px solid var(--line); }
+  dl { margin: 0; padding: 12px 14px 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 20px; }
+  dl div { min-width: 0; }
+  dt { font-size: 12px; color: var(--ink-2); }
+  dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+  .more { font-weight: 600; font-size: 14px; line-height: 1; color: var(--navy); background: none; border: 1px dashed var(--line); border-radius: var(--radius); width: 100%; padding: 12px; cursor: pointer; }
+
+  @media (min-width: 700px) {
+    .top { padding-top: 24px; }
+    .brand h1 { font-size: 24px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .hit[open] dl { animation: open .18s ease-out; }
+    @keyframes open { from { opacity: 0; transform: translateY(-4px); } }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Tra cứu theo mã Style hoặc CM# vật tư</h1>
-  <input id="q" placeholder="VD: CDT65, 28464, H-VB30373..." autofocus autocomplete="off">
-  <div id="status">Đang tải dữ liệu...</div>
-</header>
-<main id="out"></main>
+<div class="top"><div class="wrap">
+  <div class="brand">
+    <h1>Tra mẫu</h1>
+    <div class="sync"><span id="sync" aria-live="polite">Đang tải…</span><button id="reload" type="button">Tải lại</button></div>
+  </div>
+  <div class="search">
+    <input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="characters" spellcheck="false"
+      placeholder="Mã style hoặc mã vật tư CM#" aria-label="Mã style hoặc mã vật tư CM#">
+    <button class="clear" id="clear" type="button" aria-label="Xoá" hidden>×</button>
+  </div>
+  <div class="filters" id="filters" role="group" aria-label="Lọc theo khách hàng"></div>
+</div></div>
+<main class="wrap" id="out" aria-live="polite"></main>
 <script>
 // Each source: one Google Sheet tab. keys = header names matched against the query;
 // the header row is the first of the top 5 rows containing a key, so inserted title rows don't break it.
 const F2 = '1yQNURTEAMJxPhurKf7qxwzRnAn3nwvgUrveI-qpTHoE', F3 = '1qGbrPanMBZNVP6lWBh3ETSLl8Pu7Ijo-7WfpsObHSic',
       F4 = '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', F5 = '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE';
 const SOURCES = [
-  { group: 'COACH / KATE SPADE', name: 'Theo dõi PA (DATA)', id: F2, gid: '1363034961', keys: ['STYLE'] },
-  { group: 'COACH / KATE SPADE', name: 'Theo dõi reject', id: F2, gid: '849460225', keys: ['STYLE'] },
-  { group: 'COACH / KATE SPADE', name: 'PA list', id: F2, gid: '558887054', keys: ['Style'] },
-  { group: 'COACH / KATE SPADE', name: 'Theo dõi túi PA', id: F2, gid: '1041297598', keys: ['MÃ'] },
-  { group: 'COACH / KATE SPADE', name: 'PA Coach', id: F3, gid: '201883774', keys: ['Style'] },
-  { group: 'COACH / KATE SPADE', name: 'PA Kate Spade', id: F3, gid: '205650717', keys: ['Style'] },
-  { group: 'TRAVEL / GOLF', name: 'Danh sách PO (Data)', id: F4, gid: '1491559955', keys: ['Style', 'Style + Grid'] },
-  { group: 'TRAVEL / GOLF', name: 'PPS List', id: F4, gid: '2097556221', keys: ['Style', 'Style + Grid'] },
-  { group: 'TRAVEL / GOLF', name: 'PA list', id: F5, gid: '715633471', keys: ['Style', 'Style + Grid'] },
-  { group: 'TRAVEL / GOLF', name: 'Vật tư Miền Đông', id: F5, gid: '1131181694', keys: ['CM#'] },
-  { group: 'TRAVEL / GOLF', name: 'Vật tư Trà Vinh', id: F5, gid: '1057713774', keys: ['CM#'] },
+  { group: 'coach', name: 'Theo dõi PA (DATA)', id: F2, gid: '1363034961', keys: ['STYLE'] },
+  { group: 'coach', name: 'Theo dõi reject', id: F2, gid: '849460225', keys: ['STYLE'] },
+  { group: 'coach', name: 'PA list', id: F2, gid: '558887054', keys: ['Style'] },
+  { group: 'coach', name: 'Theo dõi túi PA', id: F2, gid: '1041297598', keys: ['MÃ'] },
+  { group: 'coach', name: 'PA Coach', id: F3, gid: '201883774', keys: ['Style'] },
+  { group: 'coach', name: 'PA Kate Spade', id: F3, gid: '205650717', keys: ['Style'] },
+  { group: 'travel', name: 'Danh sách PO', id: F4, gid: '1491559955', keys: ['Style', 'Style + Grid'] },
+  { group: 'travel', name: 'PPS List', id: F4, gid: '2097556221', keys: ['Style', 'Style + Grid'] },
+  { group: 'travel', name: 'PA list (Travel)', id: F5, gid: '715633471', keys: ['Style', 'Style + Grid'] },
+  { group: 'travel', name: 'Vật tư Miền Đông', id: F5, gid: '1131181694', keys: ['CM#'] },
+  { group: 'travel', name: 'Vật tư Trà Vinh', id: F5, gid: '1057713774', keys: ['CM#'] },
 ];
-const GROUPS = ['COACH / KATE SPADE', 'TRAVEL / GOLF'];
-// Card title = last key column + up to 4 of these that exist in the tab.
-const TITLE = ['STYLE NAME', 'Style Name', 'TEAM', 'Buy', 'BUY', 'PLAN MONTH', 'DUYỆT PA', 'NGÀY NHẬN TÚI', 'NHÀ MÁY', 'ĐVT', 'Grand Total', 'NOTE'];
+const GROUPS = [['all', 'Tất cả'], ['coach', 'Coach / Kate Spade'], ['travel', 'Travel / Golf']];
+const NAME = ['STYLE NAME', 'Style Name'];
+const META = ['Buy', 'BUY', 'PLAN MONTH', 'TEAM', 'NHÀ MÁY', 'NGÀY NHẬN TÚI', 'Reference PO # (VBD PO)', 'ĐVT', 'Grand Total'];
+// Status = first of these columns (in this order) with a short value; LATE columns add a "trễ" note.
+const STATUS = ['DUYỆT PA', 'Approval Status', 'NOTE', 'TV NHẬN', 'MĐ NHẬN'];
+const LATE = ['Tính Ontime/Late', 'Ontime'];
+const FAIL = /reject|không đạt/i, PASS = /^approv(al|ed)$|^ok$|^đạt$|^đã duyệt$/i;
+const PAGE = 30, RECENT_KEY = 'tracuu.recent';
+
+const $ = id => document.getElementById(id);
+const $q = $('q'), $out = $('out'), $sync = $('sync'), $filters = $('filters'), $clear = $('clear');
 const clean = h => h.replace(/\s+/g, ' ').trim();
-const MAX = 100;
-const $q = document.getElementById('q'), $out = document.getElementById('out'), $st = document.getElementById('status');
-const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
-const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const norm = s => String(s || '').trim().toUpperCase();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+let group = 'all', shown = {}, loading = true, loaded = 0, lastTotal = 0;
+const opened = new Map(); // card id -> open/closed as the user left it, kept across re-renders
 
 async function load() {
-  $st.textContent = 'Đang tải dữ liệu...';
+  loading = true;
+  loaded = 0;
+  opened.clear(); // ids are row positions, which may shift after a reload
+  $('reload').disabled = true;
+  $sync.textContent = `Đang tải 0/${SOURCES.length} bảng…`;
   await Promise.all(SOURCES.map(async src => {
     try {
-      const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const rows = Papa.parse(await res.text()).data;
       const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
       if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
-      src.headers = rows[hr].map((h, i) => clean(h) || 'Cột ' + colName(i));
-      src.keyIdx = src.keys.map(k => src.headers.indexOf(k)).filter(i => i >= 0);
-      src.titleIdx = [...src.keyIdx.slice(-1), ...TITLE.map(k => src.headers.indexOf(k)).filter(i => i >= 0).slice(0, 4)];
-      src.rows = rows.slice(hr + 1);
-      src.error = null;
+      const h = rows[hr].map((x, i) => clean(x) || 'Cột ' + colName(i));
+      const first = list => list.map(k => h.indexOf(k)).filter(i => i >= 0);
+      Object.assign(src, { headers: h, keyIdx: first(src.keys), nameIdx: first(NAME)[0], metaIdx: first(META).slice(0, 2),
+        statusIdx: first(STATUS), lateIdx: first(LATE)[0], rows: rows.slice(hr + 1), error: null });
     } catch (e) { src.rows = []; src.error = e.message; }
+    $sync.textContent = `Đang tải ${++loaded}/${SOURCES.length} bảng…`;
+    render(); // show results as each tab arrives
   }));
-  const errs = SOURCES.filter(s => s.error).map(s => `${s.name}: ${s.error}`);
-  $st.innerHTML = `Đã tải ${SOURCES.reduce((n, s) => n + s.rows.length, 0)} dòng lúc ${new Date().toLocaleTimeString('vi-VN')}`
-    + (errs.length ? ` — LỖI: ${esc(errs.join('; '))}` : '') + ' <button onclick="load()">Tải lại</button>';
-  search();
+  loading = false;
+  $('reload').disabled = false;
+  const n = SOURCES.reduce((s, x) => s + x.rows.length, 0).toLocaleString('vi-VN');
+  $sync.textContent = `${n} dòng, cập nhật ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  render();
 }
 
-function search() {
-  const q = norm($q.value);
-  if (q.length < 2) { $out.innerHTML = '<p class="muted">Gõ ít nhất 2 ký tự.</p>'; return; }
-  let html = '';
-  for (const g of GROUPS) {
-    const failed = SOURCES.filter(s => s.group === g && s.error);
-    const found = SOURCES.filter(s => s.group === g && s.rows).map(src => {
-      const hits = src.rows.filter(r => src.keyIdx.some(i => norm(r[i]).includes(q)));
-      // exact matches first
-      hits.sort((a, b) => src.keyIdx.some(i => norm(b[i]) === q) - src.keyIdx.some(i => norm(a[i]) === q));
-      return { src, hits };
-    }).filter(f => f.hits.length);
-    html += `<h2 class="group">${g} — ${found.reduce((n, f) => n + f.hits.length, 0)} kết quả</h2>`;
-    if (failed.length) html += `<p class="err">⚠ Không tải được: ${esc(failed.map(s => s.name).join(', '))} — kết quả có thể thiếu, bấm Tải lại.</p>`;
-    if (!found.length) html += '<p class="muted">Không có.</p>';
-    for (const { src, hits } of found) {
-      const link = `https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}`;
-      html += `<h3>${esc(src.name)} — ${hits.length}${hits.length > MAX ? ` (hiện ${MAX})` : ''} <a class="open" href="${link}" target="_blank">mở sheet</a></h3>`;
-      for (const r of hits.slice(0, MAX)) {
-        const title = src.titleIdx.map(i => r[i]).filter(Boolean).join(' · ');
-        const cells = r.map((v, i) => v && v.trim() && v.trim() !== '-'
-          ? `<div><b>${esc(src.headers[i] || 'Cột ' + colName(i))}</b>${esc(v.trim())}</div>` : '').join('');
-        html += `<details class="card" ${hits.length <= 3 ? 'open' : ''}><summary>${esc(title)}</summary><div class="grid">${cells}</div></details>`;
-      }
-    }
+function statusOf(src, row) {
+  const late = src.lateIdx !== undefined && /^late$/i.test(clean(row[src.lateIdx] || '')) ? ', trễ' : '';
+  for (const i of src.statusIdx) {
+    const t = clean(row[i] || '');
+    if (!t || t === '-' || t.length > 20) continue; // long free-text notes are not a status
+    return [FAIL.test(t) ? 'fail' : PASS.test(t) ? 'pass' : 'wait', t + late];
+  }
+  return [late ? 'wait' : '', late ? 'Trễ' : ''];
+}
+
+function highlight(text, q) {
+  const i = norm(text).indexOf(q);
+  if (i < 0) return esc(text);
+  return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+}
+
+function search(q) {
+  return SOURCES.filter(s => s.rows && s.rows.length).map(src => {
+    const hits = [];
+    src.rows.forEach((r, i) => {
+      const k = src.keyIdx.find(c => norm(r[c]).includes(q));
+      if (k !== undefined) hits.push({ r, k, id: src.gid + ':' + i, exact: norm(r[k]) === q });
+    });
+    hits.sort((a, b) => b.exact - a.exact);
+    return { src, hits };
+  }).filter(x => x.hits.length);
+}
+
+function hitHTML(src, { r, k, id }, q, open) {
+  const [cls, label] = statusOf(src, r);
+  const name = src.nameIdx !== undefined ? r[src.nameIdx] : '';
+  const meta = [...src.metaIdx.map(i => r[i] && `${src.headers[i]}: ${clean(r[i])}`)].filter(Boolean);
+  const fields = r.map((v, i) => (v = (v || '').trim()) && v !== '-'
+    ? `<div><dt>${esc(src.headers[i] || 'Cột ' + colName(i))}</dt><dd>${esc(v)}</dd></div>` : '').join('');
+  return `<details class="hit ${cls}" data-id="${id}"${opened.has(id) ? (opened.get(id) ? ' open' : '') : open ? ' open data-auto' : ''}><summary>
+    <span class="code">${highlight(clean(r[k]), q)}</span><span class="status">${esc(label)}</span>
+    ${name ? `<span class="name">${esc(clean(name))}</span>` : ''}
+    <span class="meta">${meta.map(m => `<span>${esc(m)}</span>`).join('')}</span>
+  </summary><dl>${fields}</dl></details>`;
+}
+
+function render() {
+  const raw = $q.value.trim(), q = norm(raw);
+  $clear.hidden = !raw;
+  const url = new URL(location.href);
+  raw ? url.searchParams.set('q', raw) : url.searchParams.delete('q');
+  history.replaceState(null, '', url);
+
+  const results = q.length >= 2 ? search(q) : [];
+  const count = g => results.filter(x => g === 'all' || x.src.group === g).reduce((n, x) => n + x.hits.length, 0);
+  $filters.innerHTML = GROUPS.map(([g, label]) =>
+    `<button type="button" data-g="${g}" aria-pressed="${g === group}">${label}${q.length >= 2 ? `<b>${count(g)}</b>` : ''}</button>`).join('');
+
+  const failed = SOURCES.filter(s => s.error && (group === 'all' || s.group === group));
+  let html = failed.length ? `<p class="warn">Không tải được ${esc(failed.map(s => s.name).join(', '))}, kết quả có thể thiếu. Bấm Tải lại để thử lại.</p>` : '';
+
+  if (q.length < 2) {
+    lastTotal = 0;
+    const recent = getRecent();
+    html += `<p class="note">Gõ mã style (vd. CDT65, 28464) hoặc mã vật tư CM# (vd. H-VB30373). Gõ một phần mã cũng được.</p>`;
+    if (recent.length) html += `<div class="recent"><p>Tra gần đây</p>${recent.map(r => `<button type="button" data-q="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
+    $out.innerHTML = html;
+    return;
+  }
+
+  const visible = results.filter(x => group === 'all' || x.src.group === group);
+  if (loading && visible.length) html += `<p class="note">Đang tải ${loaded}/${SOURCES.length} bảng, kết quả có thể chưa đủ.</p>`;
+  if (!visible.length) {
+    html += loading ? '<p class="note">Đang tải dữ liệu, chờ chút…</p>'
+      : `<p class="note">Không có mã nào chứa “${esc(raw)}”${group !== 'all' ? ' trong nhóm này. Thử chọn Tất cả.' : '. Kiểm tra lại mã, hoặc gõ ngắn hơn.'}</p>`;
+  }
+  const total = visible.reduce((n, x) => n + x.hits.length, 0);
+  lastTotal = results.reduce((n, x) => n + x.hits.length, 0);
+  for (const { src, hits } of visible) {
+    const key = src.gid, n = shown[key] || PAGE;
+    html += `<h2><span>${esc(src.name)}: ${hits.length}</span><a href="https://docs.google.com/spreadsheets/d/${src.id}/edit#gid=${src.gid}" target="_blank" rel="noopener">Mở sheet</a></h2>`;
+    html += hits.slice(0, n).map(h => hitHTML(src, h, q, total === 1)).join('');
+    if (hits.length > n) html += `<button type="button" class="more" data-more="${key}">Xem thêm ${Math.min(PAGE, hits.length - n)} dòng (còn ${hits.length - n})</button>`;
   }
   $out.innerHTML = html;
 }
 
-let t; $q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 200); });
+function getRecent() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; } }
+function saveRecent(v) {
+  if (norm(v).length < 3 || !lastTotal || loading) return; // only codes that actually found something
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify([v, ...getRecent().filter(x => norm(x) !== norm(v))].slice(0, 8))); } catch {}
+}
+
+function setQuery(v) { $q.value = v; shown = {}; opened.clear(); render(); }
+let t, t2;
+$q.addEventListener('input', () => {
+  shown = {}; opened.clear();
+  clearTimeout(t); t = setTimeout(render, 150);
+  clearTimeout(t2); t2 = setTimeout(() => saveRecent($q.value.trim()), 1500);
+});
+$q.addEventListener('keydown', e => { if (e.key === 'Escape') setQuery(''); });
+$clear.addEventListener('click', () => { setQuery(''); $q.focus(); });
+$('reload').addEventListener('click', load);
+$filters.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  group = b.dataset.g; render();
+  $filters.querySelector(`[data-g="${group}"]`).focus(); // render() replaced the button that had focus
+});
+$out.addEventListener('toggle', e => {
+  const id = e.target.dataset && e.target.dataset.id; if (!id) return;
+  if ('auto' in e.target.dataset) { delete e.target.dataset.auto; return; } // auto-open on a single hit is not a user choice
+  opened.set(id, e.target.open);
+}, true);
+$out.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.q) { setQuery(b.dataset.q); $q.focus(); }
+  if (b.dataset.more) { shown[b.dataset.more] = (shown[b.dataset.more] || PAGE) + PAGE; render(); }
+});
+document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== $q) { e.preventDefault(); $q.focus(); } });
+
+$q.value = new URL(location.href).searchParams.get('q') || '';
+render();
 load();
 </script>
 </body>
