@@ -159,7 +159,8 @@
 // Each source: one Google Sheet tab. keys = header names matched against the query;
 // the header row is the first of the top 5 rows containing a key, so inserted title rows don't break it.
 const F2 = '1yQNURTEAMJxPhurKf7qxwzRnAn3nwvgUrveI-qpTHoE', F3 = '1qGbrPanMBZNVP6lWBh3ETSLl8Pu7Ijo-7WfpsObHSic',
-      F4 = '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', F5 = '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE';
+      F4 = '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', F5 = '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE',
+      F6 = '1w7Yxed6J_VvxTdZTy5w7WoAeti8UbD5I55zK86KAqwI';
 const SOURCES = [
   { group: 'coach', name: 'Theo dõi PA (DATA)', id: F2, gid: '1363034961', keys: ['STYLE'] },
   { group: 'coach', name: 'Theo dõi reject', id: F2, gid: '849460225', keys: ['STYLE'] },
@@ -169,16 +170,17 @@ const SOURCES = [
   { group: 'coach', name: 'PA Kate Spade', id: F3, gid: '205650717', keys: ['Style'] },
   { group: 'travel', name: 'Danh sách PO', id: F4, gid: '1491559955', keys: ['Style', 'Style + Grid'] },
   { group: 'travel', name: 'PPS List', id: F4, gid: '2097556221', keys: ['Style', 'Style + Grid'] },
+  { group: 'travel', name: 'PPS TL', id: F6, gid: '1577043958', keys: ['Style'] },
   { group: 'travel', name: 'PA list (Travel)', id: F5, gid: '715633471', keys: ['Style', 'Style + Grid'] },
   { group: 'travel', name: 'Vật tư Miền Đông', id: F5, gid: '1131181694', keys: ['CM#'] },
   { group: 'travel', name: 'Vật tư Trà Vinh', id: F5, gid: '1057713774', keys: ['CM#'] },
 ];
 const GROUPS = [['all', 'Tất cả'], ['coach', 'Coach / Kate Spade'], ['travel', 'Travel / Golf']];
-const NAME = ['STYLE NAME', 'Style Name'];
+const NAME = ['STYLE NAME', 'Style Name', 'Style name'];
 const META = ['Buy', 'BUY', 'PLAN MONTH', 'TEAM', 'NHÀ MÁY', 'NGÀY NHẬN TÚI', 'Reference PO # (VBD PO)', 'ĐVT', 'Grand Total'];
 // Status = first of these columns (in this order) with a short value; LATE columns add a "trễ" note.
 const STATUS = ['DUYỆT PA', 'Approval Status', 'NOTE', 'TV NHẬN', 'MĐ NHẬN'];
-const LATE = ['Tính Ontime/Late', 'Ontime'];
+const LATE = ['Tính Ontime/Late', 'Ontime', 'KQ Ontime'];
 const FAIL = /reject|không đạt/i, PASS = /^approv(al|ed)$|^ok$|^đạt$|^đã duyệt$/i;
 const PAGE = 30, RECENT_KEY = 'tracuu.recent';
 
