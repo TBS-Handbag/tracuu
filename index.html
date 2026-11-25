@@ -183,8 +183,9 @@ const SOURCES = [
   { group: 'travel', name: 'PA list (Travel)', id: F5, gid: '715633471', keys: ['Style', 'Style + Grid'] },
   { group: 'travel', name: 'Vật tư Miền Đông', id: F5, gid: '1131181694', keys: ['CM#'] },
   { group: 'travel', name: 'Vật tư Trà Vinh', id: F5, gid: '1057713774', keys: ['CM#'] },
-  { group: 'candoi', name: 'Chi tiết (VB-OS-TL)', id: F7, gid: '411178994', keys: ['Sales Order'], prefix: true },
-  { group: 'candoi', name: 'Cân đối (VB-OS-TL)', id: F7, gid: '619865117', range: 'B1:W', keys: ['Sales Order'], prefix: true,
+  // tab: these tabs get deleted and recreated (new gid), so on HTTP 400 the gid is looked up again by tab name.
+  { group: 'candoi', name: 'Chi tiết (VB-OS-TL)', id: F7, gid: '386902746', tab: 'CHITIET', keys: ['Sales Order'], prefix: true },
+  { group: 'candoi', name: 'Cân đối (VB-OS-TL)', id: F7, gid: '1671683756', tab: 'CANDOI', range: 'B1:W', keys: ['Sales Order'], prefix: true,
     lazy: true, meta: ['Material', 'CM#'] },
 ];
 // Style images: tab H.ANH lists Drive files in blocks of "Tên" (KP221.jpg) + "ID Tập" (Drive file id).
@@ -229,7 +230,7 @@ const idb = (mode, op) => new Promise((resolve, reject) => {
     } catch (e) { db.close(); reject(e); }
   };
 });
-const cacheKey = src => `${src.id}.${src.gid}`;
+const cacheKey = src => `${src.id}.${src.tab || src.gid}`; // tab name: survives the tab being recreated with a new gid
 // Drop cached tabs no longer in SOURCES; put() overwrites the rest, so the cache stays at one copy per tab.
 const pruneCache = () => idb('readonly', s => s.getAllKeys()).then(keys => {
   const keep = new Set([...SOURCES, IMG_SRC].map(cacheKey));
@@ -244,16 +245,20 @@ async function fetchCSV(src, force) {
     const age = c ? Date.now() - c.at : -1;
     if (age >= 0 && age < CACHE_MS) { src.at = c.at; return c.text; } // age < 0: clock moved back since caching, don't trust it
   } catch {} // no IndexedDB (private mode, blocked storage): just fetch
-  const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}${src.range ? '&range=' + src.range : ''}`;
+  let relooked = false;
   for (let attempt = 0; ; attempt++) {
     let err, retryable = true;
     try {
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}${src.range ? '&range=' + src.range : ''}`, { cache: 'no-store' });
       if (res.ok) {
         const text = await res.text();
         src.at = Date.now();
         idb('readwrite', s => s.put({ at: src.at, text }, key)).catch(() => {}); // caching is best-effort, don't wait on it
         return text;
+      }
+      if (res.status === 400 && src.tab && !relooked) { // 400 = no tab with this gid
+        relooked = true;
+        if (await lookupGid(src)) { attempt--; continue; }
       }
       err = new Error('HTTP ' + res.status);
       retryable = res.status === 429 || res.status >= 500; // other 4xx (sheet made private, deleted) won't fix itself
@@ -262,6 +267,17 @@ async function fetchCSV(src, force) {
     $sync.textContent = `Đang thử lại ${src.name} (${attempt + 1}/${RETRY_WAIT.length})…`;
     await new Promise(r => setTimeout(r, RETRY_WAIT[attempt] * (0.8 + Math.random() * 0.4))); // jitter so the office doesn't retry in lockstep
   }
+}
+
+// htmlview lists every tab as {name: "CHITIET", pageUrl: "...", gid: "386902746"}; true if the gid changed.
+async function lookupGid(src) {
+  try {
+    const html = await (await fetch(`https://docs.google.com/spreadsheets/d/${src.id}/htmlview`, { cache: 'no-store' })).text();
+    const gid = (html.match(new RegExp(`name: "${src.tab}", pageUrl: "[^"]*", gid: "(\\d+)"`)) || [])[1];
+    if (!gid || gid === src.gid) return false;
+    src.gid = gid;
+    return true;
+  } catch { return false; }
 }
 
 // A tab already being fetched (e.g. a lazy tab when Reload is hit) shares that fetch instead of starting a second one.
