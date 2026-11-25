@@ -366,11 +366,12 @@ function search(q) {
     const hits = [];
     src.rows.forEach((r, i) => {
       const k = src.keyIdx.find(c => src.prefix ? norm(r[c]).startsWith(q) : norm(r[c]).includes(q));
-      if (k !== undefined) hits.push({ r, k, id: src.gid + ':' + i, exact: norm(r[k]) === q });
+      if (k !== undefined) hits.push({ r, k, id: src.gid + ':' + i, exact: norm(r[k]) === q, pass: statusOf(src, r)[0] === 'pass' });
     });
-    hits.sort((a, b) => b.exact - a.exact);
-    return { src, hits };
-  }).filter(x => x.hits.length);
+    hits.sort((a, b) => b.exact - a.exact || b.pass - a.pass); // approved rows first, so they're on the first page
+    return { src, hits, pass: hits.some(h => h.pass) };
+  }).filter(x => x.hits.length)
+    .sort((a, b) => b.pass - a.pass); // sheets with an approved row first; stable, so SOURCES order stays otherwise
 }
 
 function hitHTML(src, { r, k, id }, q, open) {
