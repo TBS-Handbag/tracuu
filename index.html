@@ -114,6 +114,9 @@
   }
   .hit[open] .chev { transform: rotate(-135deg); margin-top: 11px; }
   .hit[open] summary { background: color-mix(in srgb, var(--navy) 5%, transparent); }
+  .thumb { display: block; width: 56px; height: 56px; object-fit: contain; margin-top: 6px; border-radius: 6px; background: var(--bg); }
+  .photo { display: block; width: fit-content; margin: 8px 14px 0 calc(16px + 7.5rem + 14px); }
+  .photo img { display: block; max-width: min(320px, 100%); max-height: 320px; border-radius: 8px; background: var(--bg); }
 
   dl {
     margin: 0; padding: 4px 14px 12px calc(16px + 7.5rem + 14px);
@@ -129,6 +132,7 @@
     .code { grid-area: 1 / 1; } .status { grid-area: 1 / 2; } .chev { grid-area: 1 / 3; }
     .body { grid-column: 1 / -1; grid-row: 2; }
     dl { padding-left: 16px; grid-template-columns: 1fr; }
+    .photo { margin-left: 16px; }
     dl div { grid-template-columns: 8rem 1fr; }
   }
   @media (min-width: 700px) {
@@ -149,7 +153,7 @@
   </div>
   <div class="search">
     <input id="q" type="search" inputmode="search" autocomplete="off" autocapitalize="characters" spellcheck="false"
-      placeholder="Mã style hoặc mã vật tư CM#" aria-label="Mã style hoặc mã vật tư CM#">
+      placeholder="Mã style, mã vật tư CM# hoặc số phiếu" aria-label="Mã style, mã vật tư CM# hoặc số phiếu Sales Order">
     <button class="clear" id="clear" type="button" aria-label="Xoá" hidden>×</button>
   </div>
   <div class="filters" id="filters" role="group" aria-label="Lọc theo khách hàng"></div>
@@ -160,7 +164,10 @@
 // the header row is the first of the top 5 rows containing a key, so inserted title rows don't break it.
 const F2 = '1yQNURTEAMJxPhurKf7qxwzRnAn3nwvgUrveI-qpTHoE', F3 = '1qGbrPanMBZNVP6lWBh3ETSLl8Pu7Ijo-7WfpsObHSic',
       F4 = '1TgY4elXf5Z_X2yrzfzdVgSkBGXqgJQ-ePBMlwlER0-Y', F5 = '1Kf5hLfhd7y3b9wPnAr9ftTrvxnkVJNCwjTp8oCsFfUE',
-      F6 = '1w7Yxed6J_VvxTdZTy5w7WoAeti8UbD5I55zK86KAqwI';
+      F6 = '1w7Yxed6J_VvxTdZTy5w7WoAeti8UbD5I55zK86KAqwI', F7 = '1vNXcSyHhxgo-KMl6XVlWSv4cRdogLTdVqHCE-1nA7yc';
+// prefix: match from the start only, so a short style code doesn't hit the middle of a 10-digit order number.
+// lazy: only fetched once the query looks like an order number (CANDOI is ~9MB even cut to columns B:W).
+const SO = q => /^\d{7,}$/.test(q);
 const SOURCES = [
   { group: 'coach', name: 'Theo dõi PA (DATA)', id: F2, gid: '1363034961', keys: ['STYLE'] },
   { group: 'coach', name: 'Theo dõi reject', id: F2, gid: '849460225', keys: ['STYLE'] },
@@ -174,13 +181,20 @@ const SOURCES = [
   { group: 'travel', name: 'PA list (Travel)', id: F5, gid: '715633471', keys: ['Style', 'Style + Grid'] },
   { group: 'travel', name: 'Vật tư Miền Đông', id: F5, gid: '1131181694', keys: ['CM#'] },
   { group: 'travel', name: 'Vật tư Trà Vinh', id: F5, gid: '1057713774', keys: ['CM#'] },
+  { group: 'candoi', name: 'Chi tiết (VB-OS-TL)', id: F7, gid: '411178994', keys: ['Sales Order'], prefix: true },
+  { group: 'candoi', name: 'Cân đối (VB-OS-TL)', id: F7, gid: '619865117', range: 'B1:W', keys: ['Sales Order'], prefix: true,
+    lazy: true, meta: ['Material', 'CM#'] },
 ];
-const GROUPS = [['all', 'Tất cả'], ['coach', 'Coach / Kate Spade'], ['travel', 'Travel / Golf']];
-const NAME = ['STYLE NAME', 'Style Name', 'Style name'];
+// Style images: tab H.ANH lists Drive files in blocks of "Tên" (KP221.jpg) + "ID Tập" (Drive file id).
+const IMG_SRC = { name: 'Hình ảnh', id: '102NRQ6aK6DXyvrRz0EgVpBSGp8M97-2x-PBUT0D11Ow', gid: '1824120797' };
+const SKU = ['SKU', 'Material description']; // "54507-22519-TP": the style is the part before the first "-"
+const GROUPS = [['all', 'Tất cả'], ['coach', 'Coach / Kate Spade'], ['travel', 'Travel / Golf'], ['candoi', 'Cân đối']];
+const NAME = ['STYLE NAME', 'Style Name', 'Style name', 'Material description', 'SKU'];
 const META = ['Buy', 'BUY', 'PLAN MONTH', 'TEAM', 'NHÀ MÁY', 'NGÀY NHẬN TÚI', 'Reference PO # (VBD PO)', 'ĐVT', 'Grand Total'];
 // Status = first of these columns (in this order) with a short value; LATE columns add a "trễ" note.
 const STATUS = ['DUYỆT PA', 'Approval Status', 'NOTE', 'TV NHẬN', 'MĐ NHẬN'];
 const LATE = ['Tính Ontime/Late', 'Ontime', 'KQ Ontime'];
+const SHORT = 'THIẾU MH'; // CANDOI: "-" = enough material, anything else is the shortfall
 const FAIL = /reject|không đạt/i, PASS = /^approv(al|ed)$|^ok$|^đạt$|^đã duyệt$/i;
 const PAGE = 30, RECENT_KEY = 'tracuu.recent';
 
@@ -191,6 +205,8 @@ const norm = s => String(s || '').trim().toUpperCase();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const colName = i => { let s = ''; for (i++; i; i = (i - 1) / 26 | 0) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
 let group = 'all', shown = {}, loading = true, loaded = 0, lastTotal = 0;
+const images = new Map(); // STYLE -> Drive file id
+const active = () => SOURCES.filter(s => !s.lazy || s.want);
 const opened = new Map(); // card id -> open/closed as the user left it, kept across re-renders
 
 const RETRY_WAIT = [2000, 5000, 10000], CACHE_MS = 3 * 60 * 1000;
@@ -213,7 +229,7 @@ const idb = (mode, op) => new Promise((resolve, reject) => {
 const cacheKey = src => `${src.id}.${src.gid}`;
 // Drop cached tabs no longer in SOURCES; put() overwrites the rest, so the cache stays at one copy per tab.
 const pruneCache = () => idb('readonly', s => s.getAllKeys()).then(keys => {
-  const keep = new Set(SOURCES.map(cacheKey));
+  const keep = new Set([...SOURCES, IMG_SRC].map(cacheKey));
   keys.filter(k => !keep.has(k)).forEach(k => idb('readwrite', s => s.delete(k)).catch(() => {}));
 }).catch(() => {});
 
@@ -225,7 +241,7 @@ async function fetchCSV(src, force) {
     const age = c ? Date.now() - c.at : -1;
     if (age >= 0 && age < CACHE_MS) { src.at = c.at; return c.text; } // age < 0: clock moved back since caching, don't trust it
   } catch {} // no IndexedDB (private mode, blocked storage): just fetch
-  const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}`;
+  const url = `https://docs.google.com/spreadsheets/d/${src.id}/export?format=csv&gid=${src.gid}${src.range ? '&range=' + src.range : ''}`;
   for (let attempt = 0; ; attempt++) {
     let err, retryable = true;
     try {
@@ -245,38 +261,88 @@ async function fetchCSV(src, force) {
   }
 }
 
+// A tab already being fetched (e.g. a lazy tab when Reload is hit) shares that fetch instead of starting a second one.
+const loadSource = (src, force) => src.pending ||= fetchSource(src, force).finally(() => { src.pending = null; });
+async function fetchSource(src, force) {
+  try {
+    const rows = Papa.parse(await fetchCSV(src, force)).data;
+    const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
+    if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
+    const h = rows[hr].map((x, i) => clean(x) || 'Cột ' + colName(i));
+    const first = list => list.map(k => h.indexOf(k)).filter(i => i >= 0);
+    Object.assign(src, { headers: h, keyIdx: first(src.keys), nameIdx: first(NAME)[0], metaIdx: first(src.meta || META).slice(0, 2),
+      statusIdx: first(STATUS), lateIdx: first(LATE)[0], shortIdx: first([SHORT])[0], skuIdx: first(SKU)[0],
+      rows: rows.slice(hr + 1), error: null });
+  } catch (e) {
+    src.rows = [];
+    src.at = null;
+    src.error = e instanceof TypeError ? 'Google chặn tạm hoặc sheet không còn chia sẻ công khai' : e.message;
+  }
+}
+
+async function loadImages(force) {
+  try {
+    const rows = Papa.parse(await fetchCSV(IMG_SRC, force)).data;
+    const h = rows.slice(0, 10).find(r => r.includes('Tên')) || [];
+    const starts = h.flatMap((x, i) => x === 'Tên' && h[i + 1] === 'ID Tập' ? [i] : []);
+    images.clear();
+    for (const r of rows) for (const i of starts) {
+      const name = norm(r[i]).replace(/\.\w+$/, ''), id = (r[i + 1] || '').trim();
+      if (name && /^[\w-]{20,}$/.test(id)) images.set(name, id); // skips the "Tên"/"ID Tập" header cells
+    }
+  } catch {} // images are a nice-to-have: without them the lookup still works
+  render();
+}
+
+function syncText() {
+  const list = active();
+  const n = list.reduce((s, x) => s + (x.rows || []).length, 0).toLocaleString('vi-VN');
+  const at = Math.min(...list.map(x => x.at || Date.now())); // oldest tab, so cached data doesn't look fresher than it is
+  $sync.textContent = `${n} dòng, cập nhật ${new Date(at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 async function load(force) {
   loading = true;
   loaded = 0;
   opened.clear(); // ids are row positions, which may shift after a reload
   $('reload').disabled = true;
-  $sync.textContent = `Đang tải 0/${SOURCES.length} bảng…`;
-  await Promise.all(SOURCES.map(async src => {
-    try {
-      const rows = Papa.parse(await fetchCSV(src, force)).data;
-      const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
-      if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
-      const h = rows[hr].map((x, i) => clean(x) || 'Cột ' + colName(i));
-      const first = list => list.map(k => h.indexOf(k)).filter(i => i >= 0);
-      Object.assign(src, { headers: h, keyIdx: first(src.keys), nameIdx: first(NAME)[0], metaIdx: first(META).slice(0, 2),
-        statusIdx: first(STATUS), lateIdx: first(LATE)[0], rows: rows.slice(hr + 1), error: null });
-    } catch (e) {
-      src.rows = [];
-      src.at = null;
-      src.error = e instanceof TypeError ? 'Google chặn tạm hoặc sheet không còn chia sẻ công khai' : e.message;
-    }
-    $sync.textContent = `Đang tải ${++loaded}/${SOURCES.length} bảng…`;
+  const list = active();
+  $sync.textContent = `Đang tải 0/${list.length} bảng…`;
+  loadImages(force);
+  await Promise.all(list.map(async src => {
+    await loadSource(src, force);
+    $sync.textContent = `Đang tải ${++loaded}/${list.length} bảng…`;
     render(); // show results as each tab arrives
   }));
   loading = false;
   $('reload').disabled = false;
-  const n = SOURCES.reduce((s, x) => s + x.rows.length, 0).toLocaleString('vi-VN');
-  const at = Math.min(...SOURCES.map(x => x.at || Date.now())); // oldest tab, so cached data doesn't look fresher than it is
-  $sync.textContent = `${n} dòng, cập nhật ${new Date(at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+  syncText();
   render();
 }
 
+// A lazy tab is fetched the first time a query needs it, then stays in the normal load/reload cycle.
+function wantLazy(q) {
+  for (const src of SOURCES) {
+    if (!src.lazy || src.want || !SO(q)) continue;
+    src.want = true;
+    loadSource(src).then(() => { if (!loading) syncText(); render(); });
+  }
+}
+
+function imageOf(src, r, k) {
+  for (const v of [r[k], r[src.skuIdx]]) {
+    const s = norm(v);
+    if (s && images.has(s)) return images.get(s);
+    const base = s.split('-')[0];
+    if (base.length >= 4 && images.has(base)) return images.get(base); // >= 4: CM# like "W-VB31624" must not match an image named "W"
+  }
+}
+
 function statusOf(src, row) {
+  if (src.shortIdx !== undefined) {
+    const t = clean(row[src.shortIdx] || '');
+    return !t || t === '-' ? ['pass', 'Đủ'] : ['fail', 'Thiếu ' + t];
+  }
   const late = src.lateIdx !== undefined && /^late$/i.test(clean(row[src.lateIdx] || '')) ? ', trễ' : '';
   for (const i of src.statusIdx) {
     const t = clean(row[i] || '');
@@ -296,7 +362,7 @@ function search(q) {
   return SOURCES.filter(s => s.rows && s.rows.length).map(src => {
     const hits = [];
     src.rows.forEach((r, i) => {
-      const k = src.keyIdx.find(c => norm(r[c]).includes(q));
+      const k = src.keyIdx.find(c => src.prefix ? norm(r[c]).startsWith(q) : norm(r[c]).includes(q));
       if (k !== undefined) hits.push({ r, k, id: src.gid + ':' + i, exact: norm(r[k]) === q });
     });
     hits.sort((a, b) => b.exact - a.exact);
@@ -310,11 +376,12 @@ function hitHTML(src, { r, k, id }, q, open) {
   const meta = src.metaIdx.filter(i => clean(r[i] || '')).map(i => `${esc(src.headers[i])}: <b>${esc(clean(r[i]))}</b>`);
   const fields = r.map((v, i) => (v = (v || '').trim()) && v !== '-'
     ? `<div><dt>${esc(src.headers[i] || 'Cột ' + colName(i))}</dt><dd>${esc(v)}</dd></div>` : '').join('');
+  const img = imageOf(src, r, k), thumb = w => `https://drive.google.com/thumbnail?id=${encodeURIComponent(img)}&sz=w${w}`;
   return `<details class="hit ${cls}" data-id="${id}"${opened.has(id) ? (opened.get(id) ? ' open' : '') : open ? ' open data-auto' : ''}><summary>
-    <span class="code">${highlight(clean(r[k]), q)}</span>
+    <span class="code">${highlight(clean(r[k]), q)}${img ? `<img class="thumb" src="${thumb(160)}" alt="" loading="lazy">` : ''}</span>
     <span class="body">${name ? `<span class="name">${esc(clean(name))}</span>` : ''}<span class="meta">${meta.map(m => `<span>${m}</span>`).join('')}</span></span>
     <span class="status">${esc(label)}</span><span class="chev" aria-hidden="true"></span>
-  </summary><dl>${fields}</dl></details>`;
+  </summary>${img ? `<a class="photo" href="https://drive.google.com/file/d/${encodeURIComponent(img)}/view" target="_blank" rel="noopener"><img src="${thumb(600)}" alt="Ảnh ${esc(clean(r[k]))}" loading="lazy"></a>` : ''}<dl>${fields}</dl></details>`;
 }
 
 function render() {
@@ -324,27 +391,30 @@ function render() {
   raw ? url.searchParams.set('q', raw) : url.searchParams.delete('q');
   history.replaceState(null, '', url);
 
+  wantLazy(q);
   const results = q.length >= 2 ? search(q) : [];
   const count = g => results.filter(x => g === 'all' || x.src.group === g).reduce((n, x) => n + x.hits.length, 0);
   $filters.innerHTML = GROUPS.map(([g, label]) =>
     `<button type="button" data-g="${g}" aria-pressed="${g === group}">${label}${q.length >= 2 ? `<b>${count(g)}</b>` : ''}</button>`).join('');
 
-  const failed = SOURCES.filter(s => s.error && (group === 'all' || s.group === group));
+  const failed = active().filter(s => s.error && (group === 'all' || s.group === group));
+  const lazyBusy = SOURCES.filter(s => s.lazy && s.pending &&(group === 'all' || s.group === group));
   let html = failed.length ? `<p class="warn">Không tải được ${esc(failed.map(s => s.name).join(', '))}, kết quả có thể thiếu. Bấm Tải lại để thử lại.</p>` : '';
 
   if (q.length < 2) {
     lastTotal = 0;
     const recent = getRecent();
-    html += `<p class="note">Gõ mã style (vd. CDT65, 28464) hoặc mã vật tư CM# (vd. H-VB30373). Gõ một phần mã cũng được.</p>`;
+    html += `<p class="note">Gõ mã style (vd. CDT65, 28464), mã vật tư CM# (vd. H-VB30373) hoặc số phiếu Sales Order (vd. 3220082980). Gõ một phần mã cũng được.</p>`;
     if (recent.length) html += `<div class="recent"><p>Tra gần đây</p>${recent.map(r => `<button type="button" data-q="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
     $out.innerHTML = html;
     return;
   }
 
   const visible = results.filter(x => group === 'all' || x.src.group === group);
-  if (loading && visible.length) html += `<p class="note">Đang tải ${loaded}/${SOURCES.length} bảng, kết quả có thể chưa đủ.</p>`;
+  if (loading && visible.length) html += `<p class="note">Đang tải ${loaded}/${active().length} bảng, kết quả có thể chưa đủ.</p>`;
+  else if (lazyBusy.length && visible.length) html += `<p class="note">Đang tải ${esc(lazyBusy.map(s => s.name).join(', '))}, kết quả có thể chưa đủ.</p>`;
   if (!visible.length) {
-    html += loading ? '<p class="note">Đang tải dữ liệu, chờ chút…</p>'
+    html += loading || lazyBusy.length ? '<p class="note">Đang tải dữ liệu, chờ chút…</p>'
       : `<p class="note">Không có mã nào chứa “${esc(raw)}”${group !== 'all' ? ' trong nhóm này. Thử chọn Tất cả.' : '. Kiểm tra lại mã, hoặc gõ ngắn hơn.'}</p>`;
   }
   const total = visible.reduce((n, x) => n + x.hits.length, 0);
@@ -393,8 +463,8 @@ $out.addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== $q) { e.preventDefault(); $q.focus(); } });
 
 $q.value = new URL(location.href).searchParams.get('q') || '';
+load(); // before render(): a ?q= order number then starts its lazy tab separately instead of being loaded twice
 render();
-load();
 pruneCache();
 </script>
 </body>
