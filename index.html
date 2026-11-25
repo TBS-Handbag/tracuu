@@ -125,6 +125,8 @@
   dl div { display: grid; grid-template-columns: 9rem 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); min-width: 0; }
   dt { font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
   dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; color: var(--ink); }
+  dl .key { background: color-mix(in srgb, var(--navy) 9%, transparent); padding-inline: 8px; border-radius: 6px; border-bottom-color: transparent; margin-bottom: 2px; }
+  .key dt { color: var(--navy); font-weight: 600; } .key dd { font-weight: 700; }
   .more { font-weight: 600; font-size: 14px; line-height: 1; color: var(--navy); background: none; border: 0; border-top: 1px solid var(--line); width: 100%; padding: 13px; cursor: pointer; }
 
   @media (max-width: 600px) {
@@ -194,6 +196,7 @@ const META = ['Buy', 'BUY', 'PLAN MONTH', 'TEAM', 'NHÀ MÁY', 'NGÀY NHẬN TÚ
 // Status = first of these columns (in this order) with a short value; LATE columns add a "trễ" note.
 const STATUS = ['DUYỆT PA', 'Approval Status', 'NOTE', 'TV NHẬN', 'MĐ NHẬN'];
 const LATE = ['Tính Ontime/Late', 'Ontime', 'KQ Ontime'];
+const KEY = ['PA DUYỆT – PD VN/China', 'KHU VỰC MAY PA', 'Tính Ontime/Late', 'PA NOTE']; // coach: shown first and highlighted in details
 const SHORT = 'THIẾU MH'; // CANDOI: "-" = enough material, anything else is the shortfall
 const FAIL = /reject|không đạt/i, PASS = /^approv(al|ed)$|^ok$|^đạt$|^đã duyệt$/i;
 const PAGE = 30, RECENT_KEY = 'tracuu.recent';
@@ -374,8 +377,12 @@ function hitHTML(src, { r, k, id }, q, open) {
   const [cls, label] = statusOf(src, r);
   const name = src.nameIdx !== undefined ? r[src.nameIdx] : '';
   const meta = src.metaIdx.filter(i => clean(r[i] || '')).map(i => `${esc(src.headers[i])}: <b>${esc(clean(r[i]))}</b>`);
-  const fields = r.map((v, i) => (v = (v || '').trim()) && v !== '-'
-    ? `<div><dt>${esc(src.headers[i] || 'Cột ' + colName(i))}</dt><dd>${esc(v)}</dd></div>` : '').join('');
+  const pin = src.group === 'coach' ? KEY.map(h => src.headers.indexOf(h)).filter(i => i >= 0) : [];
+  const fields = [...pin, ...r.map((_, i) => i).filter(i => !pin.includes(i))].map(i => {
+    const v = (r[i] || '').trim();
+    return v && v !== '-'
+      ? `<div${pin.includes(i) ? ' class="key"' : ''}><dt>${esc(src.headers[i] || 'Cột ' + colName(i))}</dt><dd>${esc(v)}</dd></div>` : '';
+  }).join('');
   const img = imageOf(src, r, k), thumb = w => `https://drive.google.com/thumbnail?id=${encodeURIComponent(img)}&sz=w${w}`;
   return `<details class="hit ${cls}" data-id="${id}"${opened.has(id) ? (opened.get(id) ? ' open' : '') : open ? ' open data-auto' : ''}><summary>
     <span class="code">${highlight(clean(r[k]), q)}${img ? `<img class="thumb" src="${thumb(160)}" alt="" loading="lazy">` : ''}</span>
