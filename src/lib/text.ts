@@ -8,6 +8,9 @@ export const colName = (i: number) => {
   return s;
 };
 
+const IMG_PROXY = (process.env.NEXT_PUBLIC_IMG_PROXY || '').replace(/\/+$/, '');
+
 export const sheetUrl = (id: string, gid: string) => `https://docs.google.com/spreadsheets/d/${id}/edit#gid=${gid}`;
-export const driveThumb = (id: string, w: number) => `https://lh3.googleusercontent.com/d/${encodeURIComponent(id)}=w${w}`;
+export const driveThumb = (id: string, w: number) =>
+  IMG_PROXY ? `${IMG_PROXY}/${encodeURIComponent(id)}?w=${w}` : `https://lh3.googleusercontent.com/d/${encodeURIComponent(id)}=w${w}`;
 export const driveView = (id: string) => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;

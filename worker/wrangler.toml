@@ -1,0 +1,8 @@
+name = "tracuu-img"
+main = "index.js"
+compatibility_date = "2026-01-01"
+
+# Free *.workers.dev domains do not persist caches.default across requests, so R2 stores shared edge cache:
+[[r2_buckets]]
+binding = "IMG"
+bucket_name = "tracuu-img"

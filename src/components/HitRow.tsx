@@ -42,7 +42,7 @@ export default function HitRow({ sheet, link, hit: { row, k, id }, q, image, ope
         {/* the typed part is already known: show it at full ink, the rest of the code dimmer */}
         <span className="code">
           {before}{match && <mark>{match}</mark>}{after}
-          {image && <img className="thumb" src={driveThumb(image, 160)} alt="" loading="lazy" decoding="async" />}
+          {image && <img className="thumb" src={driveThumb(image, 400)} alt="" loading="lazy" decoding="async" onError={e => { e.currentTarget.hidden = true; }} />}
         </span>
         <span className="body">
           {name && <span className="name">{name}</span>}
@@ -54,36 +54,40 @@ export default function HitRow({ sheet, link, hit: { row, k, id }, q, image, ope
         <span className="status">{label}</span>
         <span className="chev" aria-hidden="true" />
       </summary>
-      {image && (
-        <a className="photo" href={driveView(image)} target="_blank" rel="noopener">
-          <img src={driveThumb(image, 600)} alt={`Ảnh ${code}`} loading="lazy" decoding="async" />
-        </a>
-      )}
-      <dl>
-        {order.map(i => {
-          const v = (row[i] || '').trim();
-          return v && v !== '-' && (
-            <div key={i} className={pin.includes(i) ? 'key' : undefined}>
-              <dt>{sheet.headers[i] || 'Cột ' + colName(i)}</dt><dd>{v}</dd>
-            </div>
-          );
-        })}
-      </dl>
-      {transit.map((r, j) => (
-        <Fragment key={j}>
-          <p className="transit">
-            {link!.sheet.src.name}{transit.length > 1 ? ` (${j + 1}/${transit.length})` : ''}
-            {/* the sheets have nothing finer than SO + CM#, so say these rows are not per shortfall line */}
-            {j === 0 && shared > 1 && <span className="shared">Dùng chung cho {shared} dòng cùng Sales Order + CM#, đừng cộng trùng</span>}
-          </p>
+      <div className={image ? 'detail has-photo' : 'detail'}>
+        {image && (
+          <a className="photo" href={driveView(image)} target="_blank" rel="noopener">
+            <img src={driveThumb(image, 400)} alt={`Ảnh ${code}`} loading="lazy" decoding="async" />
+          </a>
+        )}
+        <div className="fields">
           <dl>
-            {tCols.map(i => {
-              const v = (r[i] || '').trim();
-              return v && v !== '-' && <div key={i} className={tKey.has(i) ? 'key' : undefined}><dt>{link!.sheet.headers[i]}</dt><dd>{v}</dd></div>;
+            {order.map(i => {
+              const v = (row[i] || '').trim();
+              return v && v !== '-' && (
+                <div key={i} className={pin.includes(i) ? 'key' : undefined}>
+                  <dt>{sheet.headers[i] || 'Cột ' + colName(i)}</dt><dd>{v}</dd>
+                </div>
+              );
             })}
           </dl>
-        </Fragment>
-      ))}
+          {transit.map((r, j) => (
+            <Fragment key={j}>
+              <p className="transit">
+                {link!.sheet.src.name}{transit.length > 1 ? ` (${j + 1}/${transit.length})` : ''}
+                {/* the sheets have nothing finer than SO + CM#, so say these rows are not per shortfall line */}
+                {j === 0 && shared > 1 && <span className="shared">Dùng chung cho {shared} dòng cùng Sales Order + CM#, đừng cộng trùng</span>}
+              </p>
+              <dl>
+                {tCols.map(i => {
+                  const v = (r[i] || '').trim();
+                  return v && v !== '-' && <div key={i} className={tKey.has(i) ? 'key' : undefined}><dt>{link!.sheet.headers[i]}</dt><dd>{v}</dd></div>;
+                })}
+              </dl>
+            </Fragment>
+          ))}
+        </div>
+      </div>
     </details>
   );
 }
