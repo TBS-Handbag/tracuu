@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSheets } from '@/hooks/useSheets';
-import { GROUPS, PAGE, SOURCES, isOrderNo } from '@/lib/config';
+import { GROUPS, PAGE, SOURCES, isCm, isOrderNo } from '@/lib/config';
 import { getRecent, saveRecent } from '@/lib/recent';
-import { search } from '@/lib/search';
+import { linkIndex, search } from '@/lib/search';
 import type { Sheet } from '@/lib/sheets';
 import { norm } from '@/lib/text';
 import GroupFilters, { type GroupFilter } from './GroupFilters';
@@ -49,7 +49,11 @@ export default function Lookup() {
     const t = setTimeout(() => { setQ(norm(raw)); syncUrl(raw); }, 150);
     return () => clearTimeout(t);
   }, [raw]);
-  useEffect(() => { if (isOrderNo(q)) SOURCES.filter(s => s.lazy).forEach(want); }, [q, want]);
+  useEffect(() => {
+    if (!isOrderNo(q) && !isCm(q)) return;
+    const lazy = SOURCES.filter(s => s.lazy), own = isOrderNo(q) ? lazy.filter(s => s.so && q.startsWith(s.so)) : [];
+    (own.length ? own : lazy).forEach(want); // a prefix no tab claims yet: fetch them all rather than miss rows
+  }, [q, want]);
   useEffect(() => { if (q.length < 2) setRecent(getRecent()); }, [q]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -61,6 +65,7 @@ export default function Lookup() {
 
   const sheets = useMemo(() => SOURCES.flatMap(s => tabs[s.key]?.sheet || []) as Sheet[], [tabs]);
   const results = useMemo(() => q.length >= 2 ? search(sheets, q) : [], [sheets, q]);
+  const links = useMemo(() => linkIndex(sheets), [sheets]);
   const total = results.reduce((n, x) => n + x.hits.length, 0);
 
   latest.current = { total, loading };
@@ -76,7 +81,7 @@ export default function Lookup() {
 
   const sync = retry || (loading
     ? `Đang tải ${progress.loaded}/${progress.total} bảng…`
-    : `${sheets.reduce((n, s) => n + s.rows.length, 0).toLocaleString('vi-VN')} dòng, cập nhật ${time(Math.min(...sheets.map(s => s.at), Date.now()))}`); // oldest tab, so cached data doesn't look fresher than it is
+    : `${sheets.reduce((n, s) => s.src.attach ? n : n + s.rows.length, 0).toLocaleString('vi-VN')} dòng, cập nhật ${time(Math.min(...sheets.map(s => s.at), Date.now()))}`); // oldest tab, so cached data doesn't look fresher than it is
 
   const isOpen = (id: string) => opened.current.get(id) ?? visibleTotal === 1; // a single hit opens by itself
   const onToggle = (id: string, open: boolean) => { opened.current.set(id, open); rerender(n => n + 1); };
@@ -116,7 +121,7 @@ export default function Lookup() {
               : <p className="note">Không có mã nào chứa “{raw.trim()}”{group !== 'all' ? ' trong nhóm này. Thử chọn Tất cả.' : '. Kiểm tra lại mã, hoặc gõ ngắn hơn.'}</p>)}
             {visible.map(r => (
               <ResultGroup
-                key={r.sheet.src.key} result={r} q={q} limit={shown[r.sheet.src.key] || PAGE} images={images} isOpen={isOpen} onToggle={onToggle}
+                key={r.sheet.src.key} result={r} link={links.get(r.sheet.src.key)} q={q} limit={shown[r.sheet.src.key] || PAGE} images={images} isOpen={isOpen} onToggle={onToggle}
                 onMore={() => setShown(s => ({ ...s, [r.sheet.src.key]: (s[r.sheet.src.key] || PAGE) + PAGE }))}
               />
             ))}

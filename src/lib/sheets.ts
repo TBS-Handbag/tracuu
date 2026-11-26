@@ -29,8 +29,8 @@ export async function loadSheet(src: Source, opts: Parameters<typeof fetchCSV>[1
   const all = (list: string[]) => list.map(k => headers.indexOf(k)).filter(i => i >= 0);
   return {
     src, gid, at, headers, rows: rows.slice(hr + 1),
-    keyIdx: all(src.keys), nameIdx: all(COLS.name)[0], metaIdx: all(src.meta || COLS.meta).slice(0, 2),
-    statusIdx: all(COLS.status), lateIdx: all(COLS.late)[0], shortIdx: all([COLS.short])[0], skuIdx: all(COLS.sku)[0],
+    keyIdx: all(src.keys), nameIdx: all(COLS.name)[0], metaIdx: all(src.meta || COLS.meta),
+    statusIdx: all(COLS.status), lateIdx: all(COLS.late)[0], shortIdx: all([src.short || COLS.short])[0], skuIdx: all(COLS.sku)[0],
     pinIdx: all(COLS.pinned[src.group] || []),
   };
 }
