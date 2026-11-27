@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import { COLS, IMG_SRC, type Source } from './config';
-import { fetchCSV } from './csv';
+import { fetchCSV, type Fetched } from './csv';
 import { clean, colName, norm } from './text';
 
 /** A parsed tab: headers plus the column indexes the UI needs. */
@@ -20,8 +20,15 @@ export interface Sheet {
   pinIdx: number[];
 }
 
-export async function loadSheet(src: Source, opts: Parameters<typeof fetchCSV>[1]): Promise<Sheet> {
-  const { text, at, gid } = await fetchCSV(src, opts);
+type LoadOpts = Omit<NonNullable<Parameters<typeof fetchCSV>[1]>, 'onStale'>;
+
+/** onStale gets the expired cached sheet (if any) before the fresh one resolves. */
+export async function loadSheet(src: Source, opts: LoadOpts & { onStale?: (s: Sheet) => void } = {}): Promise<Sheet> {
+  const { onStale, ...rest } = opts;
+  return parseSheet(src, await fetchCSV(src, { ...rest, onStale: onStale && (f => { try { onStale(parseSheet(src, f)); } catch {} }) }));
+}
+
+function parseSheet(src: Source, { text, at, gid }: Fetched): Sheet {
   const rows = Papa.parse<string[]>(text).data;
   const hr = rows.slice(0, 5).findIndex(r => r.some(h => src.keys.includes(clean(h))));
   if (hr < 0) throw new Error('không thấy cột ' + src.keys.join('/'));
@@ -36,9 +43,13 @@ export async function loadSheet(src: Source, opts: Parameters<typeof fetchCSV>[1
 }
 
 /** STYLE (upper case, no extension) -> Drive file id */
-export async function loadImages(force?: boolean): Promise<Map<string, string>> {
+export async function loadImages(force?: boolean, onStale?: (m: Map<string, string>) => void): Promise<Map<string, string>> {
+  return parseImages((await fetchCSV(IMG_SRC, { force, onStale: onStale && (f => onStale(parseImages(f.text))) })).text);
+}
+
+function parseImages(text: string): Map<string, string> {
   const images = new Map<string, string>();
-  const rows = Papa.parse<string[]>((await fetchCSV(IMG_SRC, { force })).text).data;
+  const rows = Papa.parse<string[]>(text).data;
   const h = rows.slice(0, 10).find(r => r.includes('Tên')) || [];
   const starts = h.flatMap((x, i) => x === 'Tên' && h[i + 1] === 'ID Tập' ? [i] : []);
   for (const r of rows) for (const i of starts) {

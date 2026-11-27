@@ -68,7 +68,10 @@ export default function Lookup() {
   const links = useMemo(() => linkIndex(sheets), [sheets]);
   const total = results.reduce((n, x) => n + x.hits.length, 0);
 
-  latest.current = { total, loading };
+  // Every eager tab already shows cached data: the running load is a background refresh, results are complete.
+  const refreshing = loading && SOURCES.every(s => s.lazy || tabs[s.key]?.sheet);
+  const busy = loading && !refreshing;
+  latest.current = { total, loading: busy };
 
   const inGroup = (g: string) => group === 'all' || g === group;
   const visible = results.filter(x => inGroup(x.sheet.src.group));
@@ -79,9 +82,9 @@ export default function Lookup() {
     ? Object.fromEntries(GROUPS.map(([g]) => [g, results.filter(x => g === 'all' || x.sheet.src.group === g).reduce((n, x) => n + x.hits.length, 0)])) as Record<GroupFilter, number>
     : null;
 
-  const sync = retry || (loading
+  const sync = retry || (busy
     ? `Đang tải ${progress.loaded}/${progress.total} bảng…`
-    : `${sheets.reduce((n, s) => s.src.attach ? n : n + s.rows.length, 0).toLocaleString('vi-VN')} dòng, cập nhật ${time(Math.min(...sheets.map(s => s.at), Date.now()))}`); // oldest tab, so cached data doesn't look fresher than it is
+    : `${refreshing ? 'Đang cập nhật · ' : ''}${sheets.reduce((n, s) => s.src.attach ? n : n + s.rows.length, 0).toLocaleString('vi-VN')} dòng, cập nhật ${time(Math.min(...sheets.map(s => s.at), Date.now()))}`); // oldest tab, so cached data doesn't look fresher than it is
 
   const isOpen = (id: string) => opened.current.get(id) ?? visibleTotal === 1; // a single hit opens by itself
   const onToggle = (id: string, open: boolean) => { opened.current.set(id, open); rerender(n => n + 1); };
@@ -114,9 +117,9 @@ export default function Lookup() {
           </>
         ) : (
           <>
-            {visible.length > 0 && loading && <p className="note">Đang tải {progress.loaded}/{progress.total} bảng, kết quả có thể chưa đủ.</p>}
-            {visible.length > 0 && !loading && lazyBusy.length > 0 && <p className="note">Đang tải {lazyBusy.map(s => s.name).join(', ')}, kết quả có thể chưa đủ.</p>}
-            {!visible.length && (loading || lazyBusy.length
+            {visible.length > 0 && busy && <p className="note">Đang tải {progress.loaded}/{progress.total} bảng, kết quả có thể chưa đủ.</p>}
+            {visible.length > 0 && !busy && lazyBusy.length > 0 && <p className="note">Đang tải {lazyBusy.map(s => s.name).join(', ')}, kết quả có thể chưa đủ.</p>}
+            {!visible.length && (busy || lazyBusy.length
               ? <p className="note">Đang tải dữ liệu, chờ chút…</p>
               : <p className="note">Không có mã nào chứa “{raw.trim()}”{group !== 'all' ? ' trong nhóm này. Thử chọn Tất cả.' : '. Kiểm tra lại mã, hoặc gõ ngắn hơn.'}</p>)}
             {visible.map(r => (

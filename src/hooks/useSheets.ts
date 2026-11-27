@@ -24,7 +24,7 @@ export function useSheets() {
     const running = inFlight.current.get(src.key);
     if (running) return running;
     patch(src.key, { pending: true });
-    const p = loadSheet(src, { force, onRetry: (a, n) => setRetry(`Đang thử lại ${src.name} (${a}/${n})…`) })
+    const p = loadSheet(src, { force, onStale: sheet => patch(src.key, { sheet }), onRetry: (a, n) => setRetry(`Đang thử lại ${src.name} (${a}/${n})…`) })
       .then(sheet => patch(src.key, { sheet, error: undefined, pending: false }))
       .catch(e => patch(src.key, { error: loadError(e), pending: false })) // keep the previous data, if any: stale beats nothing
       .finally(() => { inFlight.current.delete(src.key); setRetry(null); });
@@ -37,7 +37,7 @@ export function useSheets() {
     let loaded = 0;
     setLoading(true);
     setProgress({ loaded, total: list.length });
-    loadImages(force).then(setImages).catch(() => {}); // images are a nice-to-have: without them the lookup still works
+    loadImages(force, setImages).then(setImages).catch(() => {}); // images are a nice-to-have: without them the lookup still works
     await Promise.all(list.map(src => loadOne(src, force).then(() => {
       setProgress({ loaded: ++loaded, total: list.length });
     })));

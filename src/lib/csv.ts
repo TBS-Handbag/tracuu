@@ -1,6 +1,6 @@
 // Fetching sheet tabs as CSV, with a short IndexedDB cache and retries.
 
-const RETRY_WAIT = [3000, 8000, 15000], CACHE_MS = 3 * 60 * 1000, MAX_CONCURRENT = 3;
+const RETRY_WAIT = [3000, 8000, 15000], CACHE_MS = 3 * 60 * 1000, STALE_MS = 24 * 60 * 60 * 1000, MAX_CONCURRENT = 3;
 
 interface Tab { id: string; gid: string; tab?: string; range?: string }
 
@@ -55,7 +55,8 @@ async function lookupGid(t: Tab): Promise<string | undefined> {
 export interface Fetched { text: string; at: number; gid: string }
 
 // Google's 429 usually comes without CORS headers, so it surfaces as a network TypeError, not res.status.
-export async function fetchCSV(t: Tab, opts: { force?: boolean; onRetry?: (attempt: number, of: number) => void } = {}): Promise<Fetched> {
+// onStale gets an expired cached copy right away so the UI can use it while the fresh fetch runs.
+export async function fetchCSV(t: Tab, opts: { force?: boolean; onRetry?: (attempt: number, of: number) => void; onStale?: (f: Fetched) => void } = {}): Promise<Fetched> {
   const key = cacheKey(t);
   let gid = t.gid;
   try {
@@ -63,6 +64,7 @@ export async function fetchCSV(t: Tab, opts: { force?: boolean; onRetry?: (attem
     if (c?.gid) gid = c.gid; // even when stale: the last gid that worked beats the hardcoded one for recreated tabs
     const age = c ? Date.now() - c.at : -1;
     if (c && !opts.force && age >= 0 && age < CACHE_MS) return { text: c.text, at: c.at, gid }; // age < 0: clock moved back since caching, don't trust it
+    if (c && !opts.force && age >= 0 && age < STALE_MS) opts.onStale?.({ text: c.text, at: c.at, gid }); // older than a day: likely unshared/gone, don't keep serving it
   } catch {} // no IndexedDB (private mode, blocked storage): just fetch
 
   let relooked = false;
